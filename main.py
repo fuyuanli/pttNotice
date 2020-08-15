@@ -2,7 +2,7 @@ import json
 import requests
 from bs4 import BeautifulSoup
 
-BOARD = "soho"
+BOARD = "Gossiping"
 PTT = "https://www.ptt.cc"
 URL = "https://www.ptt.cc/bbs/" + BOARD + "/index.html"
 cookies = {"over18":"1"}
@@ -16,11 +16,12 @@ prevSoup = BeautifulSoup(prevReq.text, "html.parser")
 prevResult = prevSoup.find_all("div", class_="r-ent")
 
 postDB = "posts.json"
+sentDB = "sent.json"
 
-def savePostInfo(data):
-    with open(postDB, "w") as outfile:
+def saveJson(data, db):
+    with open(db, "w") as outfile:
         json.dump(data ,outfile, ensure_ascii=False)
-def loadPostInfo(fileName):
+def loadJson(fileName):
     with open(fileName) as jsonFile:
         data = json.load(jsonFile)
     return data
@@ -58,10 +59,10 @@ def findAllPost(pageContent):
 
 def searchNewPost(pageResult):
     try:
-        oldPost = loadPostInfo(postDB)
+        oldPost = loadJson(postDB)
     except:
         currentPosts = findAllPost(pageResult)
-        savePostInfo(currentPosts)
+        saveJson(currentPosts, postDB)
         return currentPosts
     
     currentPosts = findAllPost(pageResult)
@@ -73,7 +74,7 @@ def searchNewPost(pageResult):
                 newPost = False
         if newPost:
             newPosts.append(item)
-    savePostInfo(oldPost + currentPosts)
+    saveJson(oldPost + currentPosts, postDB)
     return newPosts
 
 def lineNotifyMessage(token, msg):
@@ -81,16 +82,18 @@ def lineNotifyMessage(token, msg):
         "Authorization": "Bearer " + token, 
         "Content-Type" : "application/x-www-form-urlencoded"
     }
-  
     payload = {'message': msg}
     r = requests.post("https://notify-api.line.me/api/notify", headers = headers, params = payload)
     return r.status_code
   
 token = ''
-
-#lineNotifyMessage(token, message)    
 newPosts = searchNewPost(prevResult)
 newPosts += searchNewPost(indexResult)
+try:
+    noticedPosts = loadJson(sentDB)
+except:
+    noticedPosts = []
+
 for item in newPosts:
     #msg = "\n日期: " + item["date"] + "\n"
     #msg += "回覆: " + str(item["reply"]) + "\n"
@@ -99,4 +102,7 @@ for item in newPosts:
     msg = "\n" + item["title"] + "\n"
     msg += item["url"] 
     print(item["title"])
-    lineNotifyMessage(token, msg)
+    if item["url"] not in noticedPosts:
+        lineNotifyMessage(token, msg)
+        noticedPosts.append(item["url"])
+saveJson(noticedPosts, sentDB)
